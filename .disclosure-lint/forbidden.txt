@@ -1,0 +1,34 @@
+# XSOC Disclosure-Lint: Forbidden Terms List
+#
+# Each non-comment, non-blank line is treated as an extended regex (ERE)
+# pattern, matched case-insensitively against every tracked source file.
+# Lines starting with '#' are comments. Blank lines are ignored.
+#
+# To allow a legitimate reference (e.g., in cleared documentation),
+# append a trailing comment to the source line:
+#
+#     some intentional reference  // disclosure-allow: <reason>
+#
+# Reviewers should sanity-check disclosure-allow markers during PR review.
+#
+# This is the AUTHORITATIVE list for the public xsoc-sig-3p repo.
+# Populate from XSOC's Appendix F (DSKAG / SP-VERSA / Wave Engine
+# internals control list). The lint job below is a placeholder until
+# this file is filled in; while empty, the job no-ops gracefully.
+#
+# CATEGORIES:
+#
+# 1. DSKAG internal mode and constant names
+# 2. SP-VERSA cipher internals (modulation parameters, round constants)
+# 3. Wave engine internals (round count, S-box layout, mixing functions)
+# 4. Private xsoc-sig-core function names not part of the public API
+# 5. Any term explicitly designated trade-secret in Appendix F
+#
+# Examples (placeholders; replace with the real list):
+#
+# (some-internal-mode-name)
+# wave_round_constant_[0-9]+
+# sp_versa_internal
+#
+# === Active terms below this line ===
+

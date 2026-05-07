@@ -1,0 +1,25 @@
+name: Disclosure Lint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  disclosure-lint:
+    name: Forbidden terms scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Make script executable
+        run: chmod +x scripts/disclosure-lint.sh
+
+      - name: Run disclosure-lint
+        run: bash scripts/disclosure-lint.sh
