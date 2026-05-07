@@ -155,7 +155,7 @@ impl SignedTransfer {
     }
 
     /// Bind input for the wave-MAC: message || signature || tx_seq.
-    /// This is the canonical input to [`MacBackend::mac`] for the IC tag.
+    /// This is the canonical input to [`crate::MacBackend::mac`] for the IC tag.
     pub fn mac_input(&self) -> Vec<u8> {
         let mut out = Vec::with_capacity(self.message.len() + QSIG_SIG_LEN + 4);
         out.extend_from_slice(&self.message);
