@@ -1,0 +1,26 @@
+# Rust
+/target/
+**/*.rs.bk
+*.pdb
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local environment / secrets (defensive)
+.env
+.env.*
+*.pem
+*.key
+secrets/
+
+# Criterion bench reports (regenerated, large)
+/target/criterion/

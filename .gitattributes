@@ -1,0 +1,36 @@
+# Default to LF, let git auto-detect text vs binary.
+* text=auto eol=lf
+
+# Force LF for source and config files.
+# Critical for shell/PowerShell/YAML so CRLF drift on Windows commits
+# does not break Linux-side CI runners.
+*.rs        text eol=lf
+*.toml      text eol=lf
+*.lock      text eol=lf
+*.md        text eol=lf
+*.txt       text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+*.json      text eol=lf
+*.sh        text eol=lf
+*.ps1       text eol=lf
+
+# Treat archives, binaries, and signed artifacts as binary.
+*.tar       binary
+*.tar.gz    binary
+*.tgz       binary
+*.zip       binary
+*.gz        binary
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.pdf       binary
+*.so        binary
+*.dll       binary
+*.dylib     binary
+*.rlib      binary
+*.wasm      binary
+
+# Linguist hints (GitHub language detection).
+benches/*.rs    linguist-language=Rust
+tests/*.rs      linguist-language=Rust

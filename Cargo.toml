@@ -1,0 +1,22 @@
+[package]
+name = "xsoc-sig-3p"
+version = "0.1.0"
+edition = "2021"
+authors = ["XSOC CORP"]
+description = "QSIG-3P: zero-broadcast three-party transferable designated-verifier signature mode for QSIG"
+license = "Proprietary"
+publish = false
+
+[dependencies]
+hmac = "0.12"
+sha2 = "0.10"
+subtle = "2.5"
+thiserror = "1.0"
+
+[dev-dependencies]
+hex = "0.4"
+criterion = { version = "=0.4.0", default-features = false }
+
+[[bench]]
+name = "qsig_3p_bench"
+harness = false
