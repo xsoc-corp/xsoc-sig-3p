@@ -124,9 +124,19 @@ impl SignedTransfer {
         }
         let mut len_buf = [0u8; 8];
         len_buf.copy_from_slice(&b[..8]);
-        let msg_len = u64::from_be_bytes(len_buf) as usize;
+        const MAX_MESSAGE_LEN: u64 = 16 * 1024 * 1024; // 16 MiB operational cap
+        let msg_len_u64 = u64::from_be_bytes(len_buf);
+        if msg_len_u64 > MAX_MESSAGE_LEN {
+            return Err(Qsig3pError::MalformedPayload("message too large"));
+        }
+        let msg_len = msg_len_u64 as usize;
 
-        let need = 8 + msg_len + QSIG_SIG_LEN + IC_TAG_LEN + 4;
+        let need = 8usize
+            .checked_add(msg_len)
+            .and_then(|n| n.checked_add(QSIG_SIG_LEN))
+            .and_then(|n| n.checked_add(IC_TAG_LEN))
+            .and_then(|n| n.checked_add(4))
+            .ok_or(Qsig3pError::MalformedPayload("length overflow"))?;
         if b.len() != need {
             return Err(Qsig3pError::MalformedPayload("payload length mismatch"));
         }
