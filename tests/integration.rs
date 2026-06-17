@@ -231,3 +231,15 @@ fn signer_overflow_at_u32_max() {
     let err = signer.sign(b"would overflow").expect_err("must overflow");
     assert_eq!(err, Qsig3pError::SequenceOverflow);
 }
+
+// SMT08 regression: from_bytes must reject a length prefix that overflows the
+// buffer, closing the parser DoS fixed in 5926a05.
+#[test]
+fn from_bytes_rejects_overflow_length_prefix() {
+    let buf_len = 16usize;
+    let msg_len: u64 = (buf_len as u64).wrapping_sub(74);
+    let mut payload = vec![0u8; buf_len];
+    payload[0..8].copy_from_slice(&msg_len.to_be_bytes());
+    let err = SignedTransfer::from_bytes(&payload).expect_err("overflow must reject");
+    assert!(matches!(err, Qsig3pError::MalformedPayload(_)));
+}
