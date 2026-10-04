@@ -42,7 +42,11 @@ findings against the trait contracts they implement.
 
 ## Severity and Reward
 
-QSIG-3P shares the existing QSIG bounty pool (0.05 BTC).
+QSIG-3P shares the QSIG bounty pool. The initial 0.05 BTC allocation is fully
+awarded. Reports received now are acknowledged with public credit in the release
+notes and in the advisory for the affected version, and XSOC will post a new
+funded cycle here when one opens. The tiers below define the severity
+classification applied at triage, and the amounts apply during a funded cycle.
 
 | Tier | Reward | Examples |
 |------|--------|----------|
