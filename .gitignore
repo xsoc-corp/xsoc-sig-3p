@@ -24,3 +24,9 @@ secrets/
 
 # Criterion bench reports (regenerated, large)
 /target/criterion/
+
+# Editor and tooling backups. The timestamped form is <file>.bak.<UTC stamp>,
+# which does not end in .bak, so the trailing wildcard is required.
+*.bak*
+*.orig
+*.rej
