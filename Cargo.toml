@@ -1,6 +1,6 @@
 [package]
 name = "xsoc-sig-3p"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 authors = ["XSOC CORP"]
 description = "QSIG-3P: zero-broadcast three-party transferable designated-verifier signature mode for QSIG"

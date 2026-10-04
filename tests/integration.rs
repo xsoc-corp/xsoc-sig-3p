@@ -2,8 +2,8 @@
 
 use xsoc_sig_3p::{
     mock::{MockMac, MockSign},
-    Holder, IcTag, PairKey, Qsig3pError, QsigSignBackend, Signature, SignedTransfer, Signer, TxSeq,
-    Verifier,
+    Holder, IcTag, PairKey, PairSequencer, Qsig3pError, QsigSignBackend, Signature, SignedTransfer,
+    Signer, TxSeq, Verifier,
 };
 
 fn pair_key(byte: u8) -> PairKey {
@@ -12,39 +12,41 @@ fn pair_key(byte: u8) -> PairKey {
 
 fn fixture() -> (
     Signer<MockSign, MockMac>,
+    PairSequencer,
     Holder<MockSign>,
     Verifier<MockMac>,
 ) {
     let k12 = pair_key(0x12);
     let k13 = pair_key(0x13);
-    let signer = Signer::new(k12.clone(), k13.clone(), TxSeq::FIRST, MockSign, MockMac);
+    let signer = Signer::new(k12.clone(), k13.clone(), MockSign, MockMac);
+    let seq = PairSequencer::fresh();
     let holder = Holder::new(k12, MockSign);
     let verifier = Verifier::new(k13, 0, MockMac);
-    (signer, holder, verifier)
+    (signer, seq, holder, verifier)
 }
 
 #[test]
 fn happy_path() {
-    let (mut signer, holder, mut verifier) = fixture();
+    let (signer, mut seq, holder, mut verifier) = fixture();
 
     let msg = b"transfer-001: USD 1,000,000 to account 9988";
-    let transfer = signer.sign(msg).expect("sign");
+    let transfer = signer.sign(&mut seq, msg).expect("sign");
 
     holder.accept(&transfer).expect("holder accepts");
     let recovered = verifier.accept(&transfer).expect("verifier accepts");
 
     assert_eq!(recovered, msg);
     assert_eq!(verifier.last_seen(), TxSeq(1));
-    assert_eq!(signer.peek_next_seq(), Some(TxSeq(2)));
+    assert_eq!(seq.peek_next(), Some(TxSeq(2)));
 }
 
 #[test]
 fn three_signatures_in_order() {
-    let (mut signer, holder, mut verifier) = fixture();
+    let (signer, mut seq, holder, mut verifier) = fixture();
 
     for i in 1u32..=3 {
         let msg = format!("payload {}", i);
-        let transfer = signer.sign(msg.as_bytes()).expect("sign");
+        let transfer = signer.sign(&mut seq, msg.as_bytes()).expect("sign");
         holder.accept(&transfer).expect("holder accepts");
         let recovered = verifier.accept(&transfer).expect("verifier accepts");
         assert_eq!(recovered, msg.as_bytes());
@@ -54,9 +56,9 @@ fn three_signatures_in_order() {
 
 #[test]
 fn replay_same_seq_rejected() {
-    let (mut signer, holder, mut verifier) = fixture();
+    let (signer, mut seq, holder, mut verifier) = fixture();
 
-    let transfer = signer.sign(b"first").expect("sign");
+    let transfer = signer.sign(&mut seq, b"first").expect("sign");
     holder.accept(&transfer).expect("holder accepts");
     verifier.accept(&transfer).expect("first acceptance");
 
@@ -79,10 +81,10 @@ fn replay_same_seq_rejected() {
 
 #[test]
 fn out_of_order_replay_rejected() {
-    let (mut signer, holder, mut verifier) = fixture();
+    let (signer, mut seq, holder, mut verifier) = fixture();
 
-    let t1 = signer.sign(b"first").expect("sign");
-    let t2 = signer.sign(b"second").expect("sign");
+    let t1 = signer.sign(&mut seq, b"first").expect("sign");
+    let t2 = signer.sign(&mut seq, b"second").expect("sign");
 
     holder.accept(&t1).expect("holder t1");
     holder.accept(&t2).expect("holder t2");
@@ -96,9 +98,9 @@ fn out_of_order_replay_rejected() {
 
 #[test]
 fn p2_modifies_message_rejected_by_p3() {
-    let (mut signer, holder, mut verifier) = fixture();
+    let (signer, mut seq, holder, mut verifier) = fixture();
 
-    let mut transfer = signer.sign(b"original").expect("sign");
+    let mut transfer = signer.sign(&mut seq, b"original").expect("sign");
     holder.accept(&transfer).expect("holder accepts original");
 
     // Malicious P2 swaps the message before forwarding.
@@ -114,9 +116,9 @@ fn p2_modifies_message_rejected_by_p3() {
 
 #[test]
 fn p2_modifies_signature_rejected_by_p3() {
-    let (mut signer, holder, mut verifier) = fixture();
+    let (signer, mut seq, holder, mut verifier) = fixture();
 
-    let mut transfer = signer.sign(b"original").expect("sign");
+    let mut transfer = signer.sign(&mut seq, b"original").expect("sign");
     holder.accept(&transfer).expect("holder accepts original");
 
     // Malicious P2 mangles the signature.
@@ -132,10 +134,10 @@ fn p2_modifies_signature_rejected_by_p3() {
 
 #[test]
 fn p2_forges_with_unknown_k13_rejected() {
-    let (mut signer, holder, mut verifier) = fixture();
+    let (signer, mut seq, holder, mut verifier) = fixture();
 
     // P2 has K12 (and can produce QSIG signatures), but does not have K13.
-    let _real = signer.sign(b"real").expect("sign");
+    let _real = signer.sign(&mut seq, b"real").expect("sign");
     holder.accept(&_real).expect("holder real");
 
     // P2 forges a fresh transfer for a NEW message, using K12 to produce
@@ -160,9 +162,9 @@ fn p2_forges_with_unknown_k13_rejected() {
 
 #[test]
 fn invalid_qsig_signature_caught_at_holder() {
-    let (mut signer, holder, _verifier) = fixture();
+    let (signer, mut seq, holder, _verifier) = fixture();
 
-    let mut transfer = signer.sign(b"hello").expect("sign");
+    let mut transfer = signer.sign(&mut seq, b"hello").expect("sign");
     let mut sig_bytes = *transfer.signature.as_bytes();
     sig_bytes[5] ^= 0x01;
     transfer.signature = Signature::from_bytes(sig_bytes);
@@ -173,8 +175,8 @@ fn invalid_qsig_signature_caught_at_holder() {
 
 #[test]
 fn wire_roundtrip_is_lossless() {
-    let (mut signer, _holder, _verifier) = fixture();
-    let transfer = signer.sign(b"wire test payload").expect("sign");
+    let (signer, mut seq, _holder, _verifier) = fixture();
+    let transfer = signer.sign(&mut seq, b"wire test payload").expect("sign");
 
     let bytes = transfer.to_bytes();
     let parsed = SignedTransfer::from_bytes(&bytes).expect("parse");
@@ -187,8 +189,8 @@ fn wire_roundtrip_is_lossless() {
 
 #[test]
 fn wire_truncation_rejected() {
-    let (mut signer, _h, _v) = fixture();
-    let transfer = signer.sign(b"x").expect("sign");
+    let (signer, mut seq, _h, _v) = fixture();
+    let transfer = signer.sign(&mut seq, b"x").expect("sign");
     let bytes = transfer.to_bytes();
 
     let truncated = &bytes[..bytes.len() - 1];
@@ -200,16 +202,11 @@ fn wire_truncation_rejected() {
 fn wrong_k13_at_verifier_rejected() {
     // Signer thinks K13 = 0x13, verifier was provisioned with 0x99.
     // Models a misconfiguration or a swap attack on the verifier's pair.
-    let mut signer = Signer::new(
-        pair_key(0x12),
-        pair_key(0x13),
-        TxSeq::FIRST,
-        MockSign,
-        MockMac,
-    );
+    let signer = Signer::new(pair_key(0x12), pair_key(0x13), MockSign, MockMac);
+    let mut seq = PairSequencer::fresh();
     let mut verifier = Verifier::new(pair_key(0x99), 0, MockMac);
 
-    let transfer = signer.sign(b"misconfig").expect("sign");
+    let transfer = signer.sign(&mut seq, b"misconfig").expect("sign");
     let err = verifier
         .accept(&transfer)
         .expect_err("verifier must reject");
@@ -218,17 +215,16 @@ fn wrong_k13_at_verifier_rejected() {
 
 #[test]
 fn signer_overflow_at_u32_max() {
-    let mut signer = Signer::new(
-        pair_key(0x12),
-        pair_key(0x13),
-        TxSeq(u32::MAX),
-        MockSign,
-        MockMac,
-    );
+    let signer = Signer::new(pair_key(0x12), pair_key(0x13), MockSign, MockMac);
+    let mut seq = PairSequencer::resuming_at(TxSeq(u32::MAX));
     // First sign at u32::MAX should succeed (it's still a valid sequence).
-    signer.sign(b"last seq").expect("u32::MAX is valid");
+    signer
+        .sign(&mut seq, b"last seq")
+        .expect("u32::MAX is valid");
     // Next attempt overflows.
-    let err = signer.sign(b"would overflow").expect_err("must overflow");
+    let err = signer
+        .sign(&mut seq, b"would overflow")
+        .expect_err("must overflow");
     assert_eq!(err, Qsig3pError::SequenceOverflow);
 }
 

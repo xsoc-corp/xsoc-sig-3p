@@ -2,22 +2,30 @@
 
 use crate::{
     protocol::{IcTag, PairKey, Signature, SignedTransfer, TxSeq},
-    MacBackend, Qsig3pError, QsigSignBackend,
+    MacBackend, PairSequencer, Qsig3pError, QsigSignBackend,
 };
 
-/// State for P1 over a single (P1, P2, P3) triple.
+/// P1's keying state for one holder channel, that is, for one (P1, P2, P3)
+/// triple.
 ///
-/// `tx_seq_next` is the next sequence number to issue, or `None` once the
-/// epoch has been exhausted (after issuing at u32::MAX). It MUST be persisted
-/// across process restarts; reusing a tx_seq under the same pairwise root is a
-/// security failure (replay vector for P2).
+/// The signer holds the two pairwise roots it needs and nothing else. It
+/// deliberately does **not** own a `tx_seq` counter.
+///
+/// `tx_seq` is scoped to the (P1, P3) pairwise channel, not to the triple,
+/// because that is the namespace [`crate::Verifier`] enforces. A single P1 may
+/// serve several holders over one P3, and all of those transfers share one
+/// replay namespace. Allocation therefore belongs to a [`PairSequencer`] that
+/// is shared across every holder channel on the same P1-P3 pair, and is passed
+/// to [`Signer::sign`] at each call.
+///
+/// Giving each holder channel its own counter would hand two holders the same
+/// `tx_seq`; P3 would accept the first to arrive and reject the second as a
+/// replay, refusing a transfer P1 had validly authorized.
 pub struct Signer<S: QsigSignBackend, M: MacBackend> {
     /// Pairwise root with P2.
     k_p2: PairKey,
     /// Pairwise root with P3.
     k_p3: PairKey,
-    /// Next tx_seq to issue, or None if exhausted.
-    tx_seq_next: Option<TxSeq>,
     /// QSIG sign backend.
     sign_backend: S,
     /// Wave-MAC backend.
@@ -25,21 +33,14 @@ pub struct Signer<S: QsigSignBackend, M: MacBackend> {
 }
 
 impl<S: QsigSignBackend, M: MacBackend> Signer<S, M> {
-    /// Construct a fresh signer state.
+    /// Construct the signer state for one holder channel.
     ///
-    /// `tx_seq_start` should be loaded from persistent state if continuing
-    /// an existing epoch. Use `TxSeq::FIRST` for a fresh pair.
-    pub fn new(
-        k_p2: PairKey,
-        k_p3: PairKey,
-        tx_seq_start: TxSeq,
-        sign_backend: S,
-        mac_backend: M,
-    ) -> Self {
+    /// Sequence allocation is supplied separately at signing time. See
+    /// [`PairSequencer`].
+    pub fn new(k_p2: PairKey, k_p3: PairKey, sign_backend: S, mac_backend: M) -> Self {
         Self {
             k_p2,
             k_p3,
-            tx_seq_next: Some(tx_seq_start),
             sign_backend,
             mac_backend,
         }
@@ -47,14 +48,24 @@ impl<S: QsigSignBackend, M: MacBackend> Signer<S, M> {
 
     /// Sign a message and produce the transfer payload P2 will hold.
     ///
+    /// `sequencer` MUST be the allocator for this signer's P1-P3 pair, shared
+    /// with every other holder channel P1 serves to the same P3.
+    ///
     /// Internally:
-    /// 1. Allocate the next tx_seq (or fail with [`Qsig3pError::SequenceOverflow`]
-    ///    if the epoch is exhausted).
+    /// 1. Allocate the next tx_seq from the pair's sequencer, or fail with
+    ///    [`Qsig3pError::SequenceOverflow`] if the epoch is exhausted.
     /// 2. Produce a 30-byte QSIG signature under K12.
     /// 3. Compute the wave-MAC IC tag over (message, signature, tx_seq) under K13.
-    /// 4. Advance the counter; mark exhausted if we just issued at u32::MAX.
-    pub fn sign(&mut self, message: &[u8]) -> Result<SignedTransfer, Qsig3pError> {
-        let tx_seq = self.tx_seq_next.ok_or(Qsig3pError::SequenceOverflow)?;
+    ///
+    /// The sequence number is consumed only when allocation succeeds, and the
+    /// allocator advances before the transfer is built, so a failure later in
+    /// this function cannot cause the same `tx_seq` to be issued twice.
+    pub fn sign(
+        &self,
+        sequencer: &mut PairSequencer,
+        message: &[u8],
+    ) -> Result<SignedTransfer, Qsig3pError> {
+        let tx_seq: TxSeq = sequencer.allocate()?;
 
         let signature: Signature = self.sign_backend.sign(&self.k_p2, message);
 
@@ -65,19 +76,11 @@ impl<S: QsigSignBackend, M: MacBackend> Signer<S, M> {
         mac_input.extend_from_slice(&tx_seq.0.to_be_bytes());
         let ic_tag: IcTag = self.mac_backend.mac(&self.k_p3, &mac_input);
 
-        // Advance; if we just issued at u32::MAX, leave tx_seq_next = None.
-        self.tx_seq_next = tx_seq.increment().ok();
-
         Ok(SignedTransfer {
             message: message.to_vec(),
             signature,
             ic_tag,
             tx_seq,
         })
-    }
-
-    /// Inspect the next tx_seq the signer will issue, or `None` if exhausted.
-    pub fn peek_next_seq(&self) -> Option<TxSeq> {
-        self.tx_seq_next
     }
 }

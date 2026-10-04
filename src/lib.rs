@@ -22,6 +22,12 @@
 //!
 //! - Zero broadcast: two point-to-point messages (P1 -> P2, P2 -> P3).
 //! - Replay protection: tx_seq strict monotonicity per (signer, verifier) pair.
+//!   The replay namespace is the P1-P3 pair, so a single P1 serving several
+//!   holders over one P3 MUST allocate every tx_seq from one shared
+//!   [`PairSequencer`]. See its module documentation.
+//! - Designated-verifier scope: P3 verifies that P1 authorized the transfer.
+//!   P3 does not hold K12 and therefore does not establish which holder
+//!   forwarded it. Holder provenance is not an authorization boundary at P3.
 //! - Forgery bound: 2^-256 from underlying MAC unforgeability.
 //! - Setup: pairwise DSKAG roots, derived from network bootstrap; no shared
 //!   broadcast channel required.
@@ -42,6 +48,7 @@
 pub mod error;
 pub mod mock;
 pub mod protocol;
+pub mod sequencer;
 
 mod holder;
 mod signer;
@@ -50,6 +57,7 @@ mod verifier;
 pub use error::Qsig3pError;
 pub use holder::Holder;
 pub use protocol::{IcTag, PairKey, Signature, SignedTransfer, TxSeq};
+pub use sequencer::PairSequencer;
 pub use signer::Signer;
 pub use verifier::Verifier;
 

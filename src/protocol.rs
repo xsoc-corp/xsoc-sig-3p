@@ -77,7 +77,11 @@ impl Eq for IcTag {}
 pub struct TxSeq(pub u32);
 
 impl TxSeq {
-    /// First valid tx_seq on a fresh pair.
+    /// First valid tx_seq on a P1-P3 pair that has issued nothing yet.
+    ///
+    /// Allocation is the responsibility of [`crate::PairSequencer`], which is
+    /// scoped to the pair. Do not start a second counter at `FIRST` for another
+    /// holder channel on the same pair.
     pub const FIRST: TxSeq = TxSeq(1);
 
     /// Increment, returning [`Qsig3pError::SequenceOverflow`] at u32::MAX.
