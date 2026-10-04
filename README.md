@@ -4,11 +4,46 @@ Reference library for the XSOC-QSIG three-party transferable transaction signatu
 
 ## What this repository is
 
-This is the public, Apache-2.0 reference implementation of the QSIG-3P protocol. It contains the full protocol logic, the role state machines (`Signer`, `Holder`, `Verifier`), transaction sequencing, and the transferability construction that binds an originator's authorization to a verifier who does not hold the originator's pairwise key.
+This is the public, Apache-2.0 reference implementation of the QSIG-3P protocol. It contains the full protocol logic, the role state machines (`Signer`, `Holder`, `Verifier`), pair-scoped transaction sequencing (`PairSequencer`), and the transferability construction that binds an originator's authorization to a verifier who does not hold the originator's pairwise key.
 
 The cryptographic backends in this repository are mock backends by design. `MockSign` and `MockMac` in `src/mock.rs` are HMAC-SHA256 placeholders, isolated to a single module and used only by the tests and benchmarks. They exist so that this repository can be public, cloned, built, and exercised by anyone without access to XSOC's proprietary cryptographic core.
 
 The protocol logic in this repository is real. The cryptographic backends in this repository are not the production primitives. See the boundary below.
+
+## Sequencing and verification scope
+
+Two scopes govern this protocol, and they are deliberately different.
+
+**Replay protection is scoped to the P1-P3 pair.** P3 holds the P1-P3 pairwise
+root and one highest-accepted `tx_seq`, and accepts a transfer only when its
+sequence strictly exceeds that value. A single P1 may serve several holders over
+one P3, and every one of those transfers competes in that same replay namespace.
+
+Allocation therefore belongs to `PairSequencer`, which is constructed once per
+P1-P3 pair and shared across every holder channel on that pair. `Signer` carries
+no counter and takes the sequencer at signing time, so the shared allocator is
+explicit at each call site:
+
+```rust
+// One sequencer per P1-P3 pair, shared by every holder channel on it.
+let mut pair_seq = PairSequencer::fresh();
+
+let signer_a = Signer::new(k12_a, k13.clone(), sign_backend, mac_backend);
+let signer_b = Signer::new(k12_b, k13, sign_backend, mac_backend);
+
+let ta = signer_a.sign(&mut pair_seq, message_a)?;  // tx_seq 1
+let tb = signer_b.sign(&mut pair_seq, message_b)?;  // tx_seq 2
+```
+
+The sequencer MUST be persisted per pair across process restarts. Use
+`PairSequencer::resuming_at` to continue an epoch from stored state, and treat a
+value that moves backward as a replay window reopening.
+
+**Verification is scoped to the P1-P3 pair as well.** P3 holds no K12, so it
+establishes that P1 authorized a transfer rather than which holder forwarded it.
+Holder provenance is carried as application context and is not an authorization
+boundary at P3. The property is pinned by a named test in
+`tests/pair_sequence_scope.rs`.
 
 ## Trade-secret boundary
 
@@ -26,6 +61,9 @@ The production cryptographic backends implement the same `QsigSignBackend` and `
 The full production QSIG-3P capability, with the DSKAG-rooted signing and wave-engine MAC backends, is implemented, tested, and available under license from XSOC. Production deployment substitutes the licensed backends for the mock backends in this repository by implementing the same two traits, with no change to the protocol logic. Contact licensing@xsoccorp.com.
 
 ## Building and testing
+
+Minimum supported Rust version is 1.75, declared as `rust-version` in
+`Cargo.toml` and enforced by a dedicated CI job.
 
 ```
 cargo build

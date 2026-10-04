@@ -5,11 +5,12 @@ use crate::{
     Qsig3pError, QsigSignBackend,
 };
 
-/// State for P2 over a single (P1, P2, P3) triple.
+/// P2's state for one (P1, P2) pairwise channel.
 ///
-/// P2 verifies the QSIG signature against its pairwise key with P1 (K12), but
-/// cannot verify the IC tag because it does not know K13. P2 forwards the
-/// transfer payload verbatim to P3.
+/// The holder carries the P1-P2 pairwise root and nothing else, so its scope is
+/// that pair. P2 verifies the QSIG signature under K12, and forwards the
+/// transfer payload to P3 verbatim. It does not verify the IC tag, because K13
+/// belongs to the P1-P3 channel and P2 never holds it.
 pub struct Holder<S: QsigSignBackend> {
     /// Pairwise root with P1.
     k_p1: PairKey,
