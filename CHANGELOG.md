@@ -22,8 +22,8 @@ no MAC transcript change, and no change to the cryptographic construction.
   per pair and shared across every holder channel on it. The previously
   vulnerable construction no longer compiles.
 
-  Reported externally on 2026-10-04 with a reproducing proof of concept, and
-  triaged as Moderate.
+  Reported by tokenistq (https://github.com/tokenistq) on 2026-10-04 with a
+  reproducing proof of concept, and triaged as Moderate.
 
 - `Verifier::accept` now verifies the IC tag before comparing `tx_seq`, which is
   the order its documentation already specified. The previous order let an
