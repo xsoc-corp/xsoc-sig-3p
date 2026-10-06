@@ -166,6 +166,10 @@ no MAC transcript change, and no change to the cryptographic construction.
   per pair and shared across every holder channel on it. The previously
   vulnerable construction no longer compiles.
 
+  Corrected in 0.3.0: at 0.2.0 the type still derived `Clone` and implemented
+  `Default`, so the sentence above held in prose rather than in the type
+  system. See the 0.3.0 entry.
+
   Reported by tokenistq (https://github.com/tokenistq) on 2026-10-04 with a
   reproducing proof of concept, and triaged as Moderate.
 
