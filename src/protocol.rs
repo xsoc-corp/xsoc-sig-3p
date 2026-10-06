@@ -1,8 +1,51 @@
 //! Protocol-level types: keys, signatures, IC tags, sequences, and the
 //! wire-format transfer payload.
 
-use crate::{Qsig3pError, IC_TAG_LEN, PAIR_KEY_LEN, QSIG_SIG_LEN};
+use crate::{Qsig3pError, DST_IC, IC_TAG_LEN, PAIR_KEY_LEN, QSIG_SIG_LEN};
 use subtle::ConstantTimeEq;
+use zeroize::Zeroize;
+
+/// Operational ceiling on the message length carried in a transfer.
+///
+/// The wire length prefix is a big-endian `u32` (paper 3.2), so the format
+/// admits up to 4 GiB. This crate refuses anything above 16 MiB on both the
+/// encode and the decode path, which keeps a hostile length prefix from
+/// driving an allocation.
+pub const MAX_MESSAGE_LEN: usize = 16 * 1024 * 1024;
+
+/// Canonical input to the QSIG signature: `m || seq4`.
+///
+/// Specified by XSOC-QSIG-3P v1.0 section 3.3 step 2 and verified against the
+/// same construction in section 3.4 step 1. `seq4` is the big-endian encoding
+/// of `tx_seq`. The variable-length message leads and the fixed 4-byte
+/// sequence trails, so the encoding is unambiguous.
+///
+/// `DST_SIG` is applied by the signature backend, not here. See
+/// [`crate::DST_SIG`].
+pub fn signing_input(message: &[u8], tx_seq: TxSeq) -> Vec<u8> {
+    let mut out = Vec::with_capacity(message.len() + 4);
+    out.extend_from_slice(message);
+    out.extend_from_slice(&tx_seq.0.to_be_bytes());
+    out
+}
+
+/// Canonical input to the IC tag MAC: `DST_IC || m || sigma || seq4`.
+///
+/// Specified by XSOC-QSIG-3P v1.0 section 3.3 step 3 and recomputed by the
+/// verifier in section 3.5 step 2. The variable-length message sits between a
+/// fixed prefix and a fixed 34-byte suffix, so the encoding is unambiguous.
+///
+/// Signer and verifier both build the transcript here. Holding one
+/// construction rather than two is deliberate: two copies of a transcript that
+/// happen to agree is how they come to disagree.
+pub fn ic_tag_input(message: &[u8], signature: &Signature, tx_seq: TxSeq) -> Vec<u8> {
+    let mut out = Vec::with_capacity(DST_IC.len() + message.len() + QSIG_SIG_LEN + 4);
+    out.extend_from_slice(DST_IC);
+    out.extend_from_slice(message);
+    out.extend_from_slice(signature.as_bytes());
+    out.extend_from_slice(&tx_seq.0.to_be_bytes());
+    out
+}
 
 /// A pairwise DSKAG root, 32 bytes.
 ///
@@ -29,8 +72,22 @@ impl core::fmt::Debug for PairKey {
     }
 }
 
+impl Drop for PairKey {
+    /// Wipes the pairwise root when the key goes out of scope.
+    ///
+    /// `zeroize` performs a volatile write the optimizer is not permitted to
+    /// elide. Each clone owns its own buffer and wipes it independently.
+    fn drop(&mut self) {
+        self.0.zeroize();
+    }
+}
+
 /// A 30-byte QSIG signature.
-#[derive(Clone, Debug, PartialEq, Eq)]
+///
+/// Equality is constant time. A 30-byte authenticator compared byte by byte
+/// with early exit is a timing oracle for forgery, so `PartialEq` is written
+/// rather than derived.
+#[derive(Clone, Debug)]
 pub struct Signature([u8; QSIG_SIG_LEN]);
 
 impl Signature {
@@ -44,6 +101,14 @@ impl Signature {
         &self.0
     }
 }
+
+impl PartialEq for Signature {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.ct_eq(&other.0).into()
+    }
+}
+
+impl Eq for Signature {}
 
 /// A 32-byte wave-MAC IC tag.
 #[derive(Clone, Debug)]
@@ -95,8 +160,9 @@ impl TxSeq {
 
 /// The wire payload P2 forwards to P3.
 ///
-/// Wire format is length-prefixed message, signature, IC tag, tx_seq.
-/// The pairwise keys never appear here.
+/// `<len4, m, sigma30, tau32, seq4>` per XSOC-QSIG-3P v1.0 section 3.2, where
+/// `len` is the big-endian 32-bit length of the message. Fixed overhead is
+/// 70 bytes: 4 + 30 + 32 + 4. The pairwise keys never appear here.
 #[derive(Clone, Debug)]
 pub struct SignedTransfer {
     /// The signed message.
@@ -110,32 +176,40 @@ pub struct SignedTransfer {
 }
 
 impl SignedTransfer {
-    /// Serialize to the wire format described in the crate docs.
-    pub fn to_bytes(&self) -> Vec<u8> {
-        let mut out = Vec::with_capacity(8 + self.message.len() + QSIG_SIG_LEN + IC_TAG_LEN + 4);
-        out.extend_from_slice(&(self.message.len() as u64).to_be_bytes());
+    /// Serialize to the wire format in section 3.2.
+    ///
+    /// Fails rather than truncating when the message exceeds
+    /// [`MAX_MESSAGE_LEN`]. `SignedTransfer` has public fields, so an
+    /// oversized message can reach this function without passing through
+    /// [`crate::Signer::sign`].
+    pub fn to_bytes(&self) -> Result<Vec<u8>, Qsig3pError> {
+        if self.message.len() > MAX_MESSAGE_LEN {
+            return Err(Qsig3pError::MalformedPayload("message too large to encode"));
+        }
+        let len = self.message.len() as u32;
+        let mut out = Vec::with_capacity(4 + self.message.len() + QSIG_SIG_LEN + IC_TAG_LEN + 4);
+        out.extend_from_slice(&len.to_be_bytes());
         out.extend_from_slice(&self.message);
         out.extend_from_slice(self.signature.as_bytes());
         out.extend_from_slice(self.ic_tag.as_bytes());
         out.extend_from_slice(&self.tx_seq.0.to_be_bytes());
-        out
+        Ok(out)
     }
 
     /// Parse from wire bytes.
     pub fn from_bytes(b: &[u8]) -> Result<Self, Qsig3pError> {
-        if b.len() < 8 {
+        if b.len() < 4 {
             return Err(Qsig3pError::MalformedPayload("missing length prefix"));
         }
-        let mut len_buf = [0u8; 8];
-        len_buf.copy_from_slice(&b[..8]);
-        const MAX_MESSAGE_LEN: u64 = 16 * 1024 * 1024; // 16 MiB operational cap
-        let msg_len_u64 = u64::from_be_bytes(len_buf);
-        if msg_len_u64 > MAX_MESSAGE_LEN {
+        let mut len_buf = [0u8; 4];
+        len_buf.copy_from_slice(&b[..4]);
+        let msg_len_u32 = u32::from_be_bytes(len_buf);
+        if msg_len_u32 as u64 > MAX_MESSAGE_LEN as u64 {
             return Err(Qsig3pError::MalformedPayload("message too large"));
         }
-        let msg_len = msg_len_u64 as usize;
+        let msg_len = msg_len_u32 as usize;
 
-        let need = 8usize
+        let need = 4usize
             .checked_add(msg_len)
             .and_then(|n| n.checked_add(QSIG_SIG_LEN))
             .and_then(|n| n.checked_add(IC_TAG_LEN))
@@ -145,7 +219,7 @@ impl SignedTransfer {
             return Err(Qsig3pError::MalformedPayload("payload length mismatch"));
         }
 
-        let mut cursor = 8;
+        let mut cursor = 4;
         let message = b[cursor..cursor + msg_len].to_vec();
         cursor += msg_len;
 
@@ -168,13 +242,18 @@ impl SignedTransfer {
         })
     }
 
-    /// Bind input for the wave-MAC: message || signature || tx_seq.
-    /// This is the canonical input to [`crate::MacBackend::mac`] for the IC tag.
+    /// Canonical input to [`crate::MacBackend::mac`] for the IC tag.
+    ///
+    /// Delegates to [`ic_tag_input`], which is the single construction of this
+    /// transcript used by the signer and the verifier alike.
     pub fn mac_input(&self) -> Vec<u8> {
-        let mut out = Vec::with_capacity(self.message.len() + QSIG_SIG_LEN + 4);
-        out.extend_from_slice(&self.message);
-        out.extend_from_slice(self.signature.as_bytes());
-        out.extend_from_slice(&self.tx_seq.0.to_be_bytes());
-        out
+        ic_tag_input(&self.message, &self.signature, self.tx_seq)
+    }
+
+    /// Canonical input to the QSIG signature for this transfer.
+    ///
+    /// Delegates to [`signing_input`].
+    pub fn signing_input(&self) -> Vec<u8> {
+        signing_input(&self.message, self.tx_seq)
     }
 }

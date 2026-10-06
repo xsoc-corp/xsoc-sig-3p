@@ -48,7 +48,7 @@ use crate::{protocol::TxSeq, Qsig3pError};
 /// defect this type exists to close. `PairSequencer` is therefore deliberately
 /// neither `Clone` nor `Copy`:
 ///
-/// ```compile_fail
+/// ```compile_fail,E0277
 /// fn requires_clone<T: Clone>() {}
 /// requires_clone::<xsoc_sig_3p::PairSequencer>();
 /// ```
@@ -59,7 +59,7 @@ use crate::{protocol::TxSeq, Qsig3pError};
 /// [`PairSequencer::fresh`] or [`PairSequencer::resuming_at`], each of which
 /// states which case the caller means:
 ///
-/// ```compile_fail
+/// ```compile_fail,E0277
 /// fn requires_default<T: Default>() {}
 /// requires_default::<xsoc_sig_3p::PairSequencer>();
 /// ```

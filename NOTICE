@@ -1,0 +1,44 @@
+XSOC-QSIG-3P reference implementation
+Copyright 2026 XSOC CORP
+
+This product includes software developed by XSOC CORP.
+
+Licensed under the Apache License, Version 2.0. See LICENSE for the full
+terms.
+
+SCOPE OF THIS GRANT
+
+The Apache License, Version 2.0 covers the contents of this repository: the
+QSIG-3P protocol orchestration (the Signer, Holder and Verifier role types),
+the QsigSignBackend and MacBackend trait abstractions, the wire format, the
+PairSequencer, the tests and benches, and the HMAC-SHA256 mock backends used
+for local development.
+
+This grant reaches the contents of this repository and nothing beyond it.
+
+COMPONENTS OUTSIDE THIS GRANT
+
+The following are proprietary to XSOC CORP, are licensed separately under
+commercial terms, and are not distributed here. No right to them is granted
+by the Apache License, Version 2.0, by implication, estoppel, or otherwise:
+
+  - DSKAG (Deterministic Symmetric Key Agreement) and its internals
+  - SP-VERSA and its internals
+  - the XSOC wave engine and its internals
+  - xsoc-sig-core
+  - xsoc-sig-3p-production, the DSKAG-rooted production adapter that
+    implements the two trait abstractions published here
+
+The mock backends in src/mock.rs are HMAC-SHA256 stand-ins for local
+development. They are not the production primitives and carry none of their
+properties.
+
+EXPORT CONTROL
+
+The production adapter is classified ECCN 5D002.C1. Recipients are
+responsible for compliance with applicable export control laws.
+
+CONTACT
+
+Commercial licensing: licensing@xsoccorp.com
+Security reports: security@xsoccorp.com

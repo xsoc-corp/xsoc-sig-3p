@@ -538,7 +538,7 @@ dependencies = [
 
 [[package]]
 name = "xsoc-sig-3p"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "criterion",
  "hex",
@@ -546,7 +546,14 @@ dependencies = [
  "sha2",
  "subtle",
  "thiserror",
+ "zeroize",
 ]
+
+[[package]]
+name = "zeroize"
+version = "1.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ced3678a2879b30306d323f4542626697a464a97c0a07c9aebf7ebca65cd4dde"
 
 [[package]]
 name = "zmij"

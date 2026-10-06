@@ -1,11 +1,11 @@
 [package]
 name = "xsoc-sig-3p"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 rust-version = "1.75"
 authors = ["XSOC CORP"]
 description = "QSIG-3P: zero-broadcast three-party transferable designated-verifier signature mode for QSIG"
-license = "Proprietary"
+license = "Apache-2.0"
 publish = false
 
 [dependencies]
@@ -13,6 +13,7 @@ hmac = "0.12"
 sha2 = "0.10"
 subtle = "2.5"
 thiserror = "1.0"
+zeroize = { version = "=1.8.1", default-features = false }
 
 [dev-dependencies]
 hex = "0.4"

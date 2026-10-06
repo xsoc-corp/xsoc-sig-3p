@@ -1,7 +1,7 @@
 //! Signer (P1) state and operations.
 
 use crate::{
-    protocol::{IcTag, PairKey, Signature, SignedTransfer, TxSeq},
+    protocol::{ic_tag_input, signing_input, IcTag, PairKey, Signature, SignedTransfer, TxSeq},
     MacBackend, PairSequencer, Qsig3pError, QsigSignBackend,
 };
 
@@ -51,11 +51,12 @@ impl<S: QsigSignBackend, M: MacBackend> Signer<S, M> {
     /// `sequencer` MUST be the allocator for this signer's P1-P3 pair, shared
     /// with every other holder channel P1 serves to the same P3.
     ///
-    /// Internally:
+    /// Internally, following XSOC-QSIG-3P v1.0 section 3.3:
     /// 1. Allocate the next tx_seq from the pair's sequencer, or fail with
     ///    [`Qsig3pError::SequenceOverflow`] if the epoch is exhausted.
-    /// 2. Produce a 30-byte QSIG signature under K12.
-    /// 3. Compute the wave-MAC IC tag over (message, signature, tx_seq) under K13.
+    /// 2. Produce a 30-byte QSIG signature under K12 over `m || seq4`, so the
+    ///    sequence number sits inside what P1 authorizes.
+    /// 3. Compute the IC tag under K13 over `DST_IC || m || sigma || seq4`.
     ///
     /// The sequence number is consumed only when allocation succeeds, and the
     /// allocator advances before the transfer is built, so a failure later in
@@ -67,13 +68,12 @@ impl<S: QsigSignBackend, M: MacBackend> Signer<S, M> {
     ) -> Result<SignedTransfer, Qsig3pError> {
         let tx_seq: TxSeq = sequencer.allocate()?;
 
-        let signature: Signature = self.sign_backend.sign(&self.k_p2, message);
+        // Section 3.3 step 2: the signature covers m || seq4.
+        let signed = signing_input(message, tx_seq);
+        let signature: Signature = self.sign_backend.sign(&self.k_p2, &signed);
 
-        // IC tag binds (message, signature, tx_seq) to K13.
-        let mut mac_input = Vec::with_capacity(message.len() + 30 + 4);
-        mac_input.extend_from_slice(message);
-        mac_input.extend_from_slice(signature.as_bytes());
-        mac_input.extend_from_slice(&tx_seq.0.to_be_bytes());
+        // Section 3.3 step 3: the IC tag binds DST_IC || m || sigma || seq4 to K13.
+        let mac_input = ic_tag_input(message, &signature, tx_seq);
         let ic_tag: IcTag = self.mac_backend.mac(&self.k_p3, &mac_input);
 
         Ok(SignedTransfer {

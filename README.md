@@ -45,6 +45,31 @@ Holder provenance is carried as application context and is not an authorization
 boundary at P3. The property is pinned by a named test in
 `tests/pair_sequence_scope.rs`.
 
+## Conformance to XSOC-QSIG-3P v1.0
+
+This crate implements the published specification, DOI 10.5281/zenodo.20078816,
+with two deliberate departures. Each strengthens the published construction, and
+each is raised as an erratum against the specification rather than carried
+silently.
+
+**Sequence allocation is scoped to the P1-P3 pair.** Sections 3.1 and 3.3 step 1
+allocate from a counter keyed to the P1-P2 channel while section 3.5 enforces
+against one keyed to the P1-P3 pair. Where a single P1 serves several holders
+over one P3, those two scopes disagree and two holders receive the same
+`tx_seq`. Allocation here belongs to `PairSequencer`, which is pair scoped, so
+the allocation namespace and the enforcement namespace are the same object.
+
+**The verifier authenticates before it checks the sequence.** Section 3.5 orders
+the replay check first, which lets an unauthenticated sender tell a replay
+rejection from a tag rejection and recover the verifier's high-water mark by
+search. `Verifier::accept` checks the IC tag first, so every unauthenticated
+transfer yields the same error whatever sequence number it carries.
+
+Everything else follows the specification as published: the wire format of
+section 3.2 and 6.4, the signature input `m || seq4` of 3.3 step 2 and 3.4 step
+1, the IC tag input `DST_IC || m || sigma || seq4` of 3.3 step 3 and 3.5 step 2,
+and the domain-separation constants of section 4.4.
+
 ## Trade-secret boundary
 
 | Component | Status |
@@ -70,6 +95,12 @@ cargo build
 cargo test
 cargo bench
 ```
+
+`cargo test` runs the integration suites and the doctests. Two of the doctests
+are `compile_fail` guards asserting that `PairSequencer` implements neither
+`Clone` nor `Default`, because either would reopen the duplication the type
+exists to prevent. Running `cargo test --all-targets` skips doctests and
+therefore skips those guards.
 
 Tests and benchmarks run against the mock backends. Benchmark numbers from this repository reflect the HMAC-SHA256 mocks and must not be cited as production figures.
 

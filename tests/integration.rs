@@ -178,8 +178,15 @@ fn wire_roundtrip_is_lossless() {
     let (signer, mut seq, _holder, _verifier) = fixture();
     let transfer = signer.sign(&mut seq, b"wire test payload").expect("sign");
 
-    let bytes = transfer.to_bytes();
+    let bytes = transfer.to_bytes().expect("encode");
     let parsed = SignedTransfer::from_bytes(&bytes).expect("parse");
+
+    // Section 3.2 and 6.4: fixed overhead is 70 bytes (4 + 30 + 32 + 4).
+    assert_eq!(bytes.len() - transfer.message.len(), 70);
+    assert_eq!(
+        u32::from_be_bytes(bytes[..4].try_into().expect("prefix")),
+        transfer.message.len() as u32
+    );
 
     assert_eq!(parsed.message, transfer.message);
     assert_eq!(parsed.signature, transfer.signature);
@@ -191,7 +198,7 @@ fn wire_roundtrip_is_lossless() {
 fn wire_truncation_rejected() {
     let (signer, mut seq, _h, _v) = fixture();
     let transfer = signer.sign(&mut seq, b"x").expect("sign");
-    let bytes = transfer.to_bytes();
+    let bytes = transfer.to_bytes().expect("encode");
 
     let truncated = &bytes[..bytes.len() - 1];
     let err = SignedTransfer::from_bytes(truncated).expect_err("truncation rejected");
@@ -233,9 +240,70 @@ fn signer_overflow_at_u32_max() {
 #[test]
 fn from_bytes_rejects_overflow_length_prefix() {
     let buf_len = 16usize;
-    let msg_len: u64 = (buf_len as u64).wrapping_sub(74);
+    let msg_len: u32 = (buf_len as u32).wrapping_sub(70);
     let mut payload = vec![0u8; buf_len];
-    payload[0..8].copy_from_slice(&msg_len.to_be_bytes());
+    payload[0..4].copy_from_slice(&msg_len.to_be_bytes());
     let err = SignedTransfer::from_bytes(&payload).expect_err("overflow must reject");
     assert!(matches!(err, Qsig3pError::MalformedPayload(_)));
+}
+
+// Section 3.2 fixes the length prefix at 4 bytes. A payload carrying the
+// pre-0.4.0 8-byte prefix must not parse, so a stale sender is rejected rather
+// than silently misread.
+#[test]
+fn legacy_eight_byte_prefix_is_rejected() {
+    let (signer, mut seq, _h, _v) = fixture();
+    let transfer = signer.sign(&mut seq, b"legacy").expect("sign");
+    let good = transfer.to_bytes().expect("encode");
+
+    let mut legacy = Vec::with_capacity(good.len() + 4);
+    legacy.extend_from_slice(&(transfer.message.len() as u64).to_be_bytes());
+    legacy.extend_from_slice(&good[4..]);
+
+    let err = SignedTransfer::from_bytes(&legacy).expect_err("8-byte prefix must reject");
+    assert!(matches!(err, Qsig3pError::MalformedPayload(_)));
+}
+
+// Section 3.3 step 2 places seq4 inside the signed input, so two transfers of
+// the same message at different sequence numbers carry different signatures,
+// and a tx_seq altered in transit fails at the holder.
+#[test]
+fn signature_binds_tx_seq() {
+    let (signer, mut seq, holder, _v) = fixture();
+
+    let t1 = signer.sign(&mut seq, b"same-message").expect("sign");
+    let t2 = signer.sign(&mut seq, b"same-message").expect("sign");
+    assert_ne!(t1.tx_seq, t2.tx_seq);
+    assert_ne!(
+        t1.signature, t2.signature,
+        "equal signatures would mean seq4 is outside the signed input"
+    );
+
+    let tampered = SignedTransfer {
+        message: t1.message.clone(),
+        signature: t1.signature.clone(),
+        ic_tag: t1.ic_tag.clone(),
+        tx_seq: TxSeq(0xFFFF_FFFE),
+    };
+    assert_eq!(
+        holder.accept(&tampered).expect_err("holder must reject"),
+        Qsig3pError::InvalidSignature
+    );
+}
+
+// Section 3.3 step 3 prefixes the IC tag input with DST_IC, so a tag solicited
+// under another domain cannot be replayed into this one.
+#[test]
+fn ic_tag_input_carries_the_domain_separator() {
+    let (signer, mut seq, _h, _v) = fixture();
+    let transfer = signer.sign(&mut seq, b"dst probe").expect("sign");
+
+    let input = transfer.mac_input();
+    assert!(input.starts_with(xsoc_sig_3p::DST_IC));
+    assert_eq!(
+        input.len(),
+        xsoc_sig_3p::DST_IC.len() + transfer.message.len() + 30 + 4
+    );
+    assert_eq!(xsoc_sig_3p::DST_IC, b"XSOC-QSIG-3P-IC-v1:");
+    assert_eq!(xsoc_sig_3p::DST_SIG, b"XSOC-QSIG-3P-SIG-v1:");
 }

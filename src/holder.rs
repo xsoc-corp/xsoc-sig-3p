@@ -1,7 +1,7 @@
 //! Holder (P2) state and operations.
 
 use crate::{
-    protocol::{PairKey, SignedTransfer},
+    protocol::{signing_input, PairKey, SignedTransfer},
     Qsig3pError, QsigSignBackend,
 };
 
@@ -24,17 +24,20 @@ impl<S: QsigSignBackend> Holder<S> {
         Self { k_p1, sign_backend }
     }
 
-    /// Verify P2's view: confirms the 30-byte QSIG signature is well-formed
-    /// under K12. Returns the same payload on success so the caller can
-    /// forward it to P3.
+    /// Verify P2's view, per XSOC-QSIG-3P v1.0 section 3.4 step 1.
     ///
-    /// P2 cannot detect a malicious P1 who substitutes an inconsistent IC
-    /// tag for P3; that case is caught by P3's verification step. P2 only
-    /// validates what it can validate.
+    /// Confirms the 30-byte QSIG signature under K12 over `m || seq4`. Because
+    /// the sequence number is inside the signed input, a `tx_seq` altered in
+    /// transit fails here rather than reaching P3, so P2's acceptance covers
+    /// the whole of what P1 authorized.
+    ///
+    /// The IC tag is checked by P3. P2 does not hold K13 and validates what it
+    /// can validate.
     pub fn accept(&self, transfer: &SignedTransfer) -> Result<(), Qsig3pError> {
+        let signed = signing_input(&transfer.message, transfer.tx_seq);
         if !self
             .sign_backend
-            .verify(&self.k_p1, &transfer.message, &transfer.signature)
+            .verify(&self.k_p1, &signed, &transfer.signature)
         {
             return Err(Qsig3pError::InvalidSignature);
         }

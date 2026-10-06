@@ -44,9 +44,12 @@ impl<M: MacBackend> Verifier<M> {
     ///    tx_seq) under K13.
     /// 2. The tx_seq strictly exceeds `last_seen_seq`.
     ///
-    /// The checks run in that order. Authenticating before acting on any field
-    /// of the transfer means an unauthenticated sender learns nothing about
-    /// `last_seen_seq` from which error is returned.
+    /// The checks run in that order, which departs from XSOC-QSIG-3P v1.0
+    /// section 3.5 deliberately. The specification orders the replay check
+    /// first; that lets an unauthenticated sender tell a replay rejection from
+    /// a tag rejection and recover `last_seen_seq` by search. Authenticating
+    /// first means every unauthenticated transfer yields the same error
+    /// regardless of its sequence number. Raised as an erratum against 3.5.
     ///
     /// On success, the verifier returns the message and advances
     /// `last_seen_seq`. On failure, state is not mutated, so a forged or
