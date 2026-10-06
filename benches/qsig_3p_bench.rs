@@ -20,7 +20,9 @@ fn bench_sign(c: &mut Criterion) {
         group.throughput(Throughput::Bytes(size as u64));
         group.bench_with_input(BenchmarkId::from_parameter(size), &msg, |b, msg| {
             let signer = Signer::new(pair_key(0x12), pair_key(0x13), MockSign, MockMac);
-            b.iter(|| signer.sign(&mut PairSequencer::fresh(), msg).unwrap());
+            // One allocator for the pair, shared across every call, as in use.
+            let mut seq = PairSequencer::fresh();
+            b.iter(|| signer.sign(&mut seq, msg).unwrap());
         });
     }
     group.finish();
@@ -31,7 +33,8 @@ fn bench_verify(c: &mut Criterion) {
     for &size in &[64usize, 256, 1024, 4096, 16384] {
         let msg = vec![0xABu8; size];
         let signer = Signer::new(pair_key(0x12), pair_key(0x13), MockSign, MockMac);
-        let transfer = signer.sign(&mut PairSequencer::fresh(), &msg).unwrap();
+        let mut seq = PairSequencer::fresh();
+        let transfer = signer.sign(&mut seq, &msg).unwrap();
         let holder = Holder::new(pair_key(0x12), MockSign);
 
         group.throughput(Throughput::Bytes(size as u64));
@@ -51,13 +54,15 @@ fn bench_verify(c: &mut Criterion) {
 fn bench_roundtrip(c: &mut Criterion) {
     let mut group = c.benchmark_group("qsig_3p_roundtrip");
     let msg = b"typical institutional payload, 64B".to_vec();
+    // One allocator for the pair, held outside the measured loop, as in use.
+    let mut seq = PairSequencer::fresh();
     group.bench_function("sign_hold_verify", |b| {
         b.iter(|| {
             let signer = Signer::new(pair_key(0x12), pair_key(0x13), MockSign, MockMac);
             let holder = Holder::new(pair_key(0x12), MockSign);
             let mut verifier = Verifier::new(pair_key(0x13), 0, MockMac);
 
-            let t = signer.sign(&mut PairSequencer::fresh(), &msg).unwrap();
+            let t = signer.sign(&mut seq, &msg).unwrap();
             holder.accept(&t).unwrap();
             verifier.accept(&t).unwrap();
         });

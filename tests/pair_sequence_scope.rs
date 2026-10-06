@@ -185,7 +185,7 @@ fn a_forged_transfer_reveals_nothing_about_the_counter() {
         let forged = SignedTransfer {
             message: b"probe".to_vec(),
             signature: signer
-                .sign(&mut PairSequencer::fresh(), b"probe")
+                .sign(&mut pair_seq, b"probe")
                 .expect("sig material")
                 .signature,
             ic_tag: IcTag::from_bytes([0xAA; 32]),

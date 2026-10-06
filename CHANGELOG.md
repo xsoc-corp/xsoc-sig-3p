@@ -3,6 +3,66 @@
 All notable changes to `xsoc-sig-3p` are recorded here. The format follows
 Keep a Changelog, and this project uses semantic versioning.
 
+## [0.3.0] - 2026-10-06
+
+Security release. Source breaking for library consumers. No wire format change,
+no MAC transcript change, and no change to the cryptographic construction.
+
+### Security
+
+- `PairSequencer` no longer derives `Clone`, and no longer implements
+  `Default`. 0.2.0 moved `tx_seq` allocation into `PairSequencer` so that one
+  P1-P3 pair could not hold two counters, but the type itself could still be
+  duplicated. `clone()` produced a second allocator carrying the same epoch,
+  and `default()` produced a fresh one through a path that is reachable
+  implicitly from container derives, struct-update syntax and generic bounds.
+  Either route handed one pair two allocators that both issued `tx_seq = 1`,
+  which is the condition 0.2.0 was released to remove: P3 accepts whichever
+  transfer arrives first and rejects the other as `SequenceReplay`, refusing a
+  transfer P1 validly authorized.
+
+  The 0.2.0 regression suite did not catch this, because all six tests pass one
+  shared allocator by `&mut`, which is the usage that works.
+
+  Reported externally on 2026-10-06 with a reproducing probe, and triaged as
+  Moderate.
+
+### Added
+
+- Two `compile_fail` doctests on `PairSequencer` asserting that it satisfies
+  neither a `Clone` nor a `Default` bound. They run under `cargo test` and add
+  no dependency. 0.2.0 asserted this property in prose; it is now tested.
+
+### Changed
+
+- `benches/qsig_3p_bench.rs` constructed a new `PairSequencer` on every call at
+  three sites, two of them inside measured loops, and one line of
+  `tests/pair_sequence_scope.rs` did the same. All now hold one allocator per
+  pair, which is the documented usage and what an integrator reading the
+  benches will copy.
+- The sequencer module documentation now states the one duplication path the
+  type cannot close: calling `PairSequencer::fresh` a second time for a pair
+  that has already issued. Construct the allocator where the pair's persistent
+  state is loaded, and pass `&mut` from there.
+
+### Migration from 0.2.x
+
+Replace any `sequencer.clone()` with a `&mut` borrow of the one allocator the
+pair owns, and replace `PairSequencer::default()` with `PairSequencer::fresh()`
+for a pair that has issued nothing, or `PairSequencer::resuming_at(next)` for
+one continuing a persisted epoch.
+
+```rust
+// 0.2.x
+let mut a = PairSequencer::default();
+let mut b = a.clone();                       // two allocators, one pair
+
+// 0.3.0
+let mut pair_seq = PairSequencer::fresh();   // once per P1-P3 pair
+let t1 = signer_one.sign(&mut pair_seq, m1)?;
+let t2 = signer_two.sign(&mut pair_seq, m2)?;
+```
+
 ## [0.2.0] - 2026-10-04
 
 Security release. Source breaking for library consumers. No wire format change,

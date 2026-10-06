@@ -17,6 +17,14 @@
 //! own and must be handed a sequencer at signing time, which makes the shared
 //! allocator visible at every call site.
 //!
+//! ## One allocator per pair
+//!
+//! The type refuses to be cloned or defaulted, so an allocator cannot be
+//! duplicated implicitly. Calling [`PairSequencer::fresh`] a second time for a
+//! pair that has already issued transfers remains a caller error, and it is the
+//! one duplication path the type cannot close. Construct the allocator once,
+//! where the pair's persistent state is loaded, and pass `&mut` from there.
+//!
 //! ## Persistence
 //!
 //! The sequencer MUST be persisted per (P1, P3) pair across process restarts.
@@ -33,7 +41,32 @@ use crate::{protocol::TxSeq, Qsig3pError};
 /// `next` is the sequence number that will be issued by the next call to
 /// [`PairSequencer::allocate`], or `None` once the epoch is exhausted (after
 /// issuing at `u32::MAX`).
-#[derive(Clone, Debug, PartialEq, Eq)]
+///
+/// # Duplication is prevented by the type
+///
+/// Two allocators on one pair issue the same `tx_seq` twice, which is the
+/// defect this type exists to close. `PairSequencer` is therefore deliberately
+/// neither `Clone` nor `Copy`:
+///
+/// ```compile_fail
+/// fn requires_clone<T: Clone>() {}
+/// requires_clone::<xsoc_sig_3p::PairSequencer>();
+/// ```
+///
+/// It is deliberately not `Default` either. A pair's sequence state has no
+/// meaningful default, and `Default` is reachable implicitly through container
+/// derives, struct-update syntax and generic bounds. Construct with
+/// [`PairSequencer::fresh`] or [`PairSequencer::resuming_at`], each of which
+/// states which case the caller means:
+///
+/// ```compile_fail
+/// fn requires_default<T: Default>() {}
+/// requires_default::<xsoc_sig_3p::PairSequencer>();
+/// ```
+///
+/// Moving the allocator is supported and is how it should be shared: hold one
+/// per pair, and pass `&mut` to every [`crate::Signer::sign`] call on it.
+#[derive(Debug, PartialEq, Eq)]
 pub struct PairSequencer {
     next: Option<TxSeq>,
 }
@@ -79,11 +112,5 @@ impl PairSequencer {
     /// `None` if the epoch is exhausted. Does not consume.
     pub fn peek_next(&self) -> Option<TxSeq> {
         self.next
-    }
-}
-
-impl Default for PairSequencer {
-    fn default() -> Self {
-        Self::fresh()
     }
 }
