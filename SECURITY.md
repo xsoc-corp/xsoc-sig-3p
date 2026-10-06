@@ -86,7 +86,13 @@ who:
 - Give us a reasonable window to respond before public disclosure
 - Do not exploit findings beyond what is necessary to demonstrate the issue
 
-## Hall of Fame
+## Credits
 
-Researchers credited under previous QSIG bounty cycles are listed at
-`xsoccorp.com/q-sig-security-bounty/credits`.
+Researchers credited under this program are listed in
+[CREDITS.md](CREDITS.md) in this repository, and at
+https://www.xsoccorp.com/q-sig-security-bounty/credits.
+
+Credit is published once the reporting identity is confirmed. We ask for a
+public artifact under the account the credit will name, carrying a string we
+supply, which ties the handle being credited and the party reporting to the
+same holder. Tell us how you want to be credited when you report.
