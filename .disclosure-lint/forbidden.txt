@@ -2,7 +2,8 @@
 #
 # Each non-comment, non-blank line is treated as an extended regex (ERE)
 # pattern, matched case-insensitively against every tracked source file.
-# Lines starting with '#' are comments. Blank lines are ignored.
+# Lines starting with '#' are comments. Blank lines are ignored. Leading
+# and trailing whitespace on a term is trimmed before the pattern is built.
 #
 # To allow a legitimate reference (e.g., in cleared documentation),
 # append a trailing comment to the source line:
@@ -12,9 +13,20 @@
 # Reviewers should sanity-check disclosure-allow markers during PR review.
 #
 # This is the AUTHORITATIVE list for the public xsoc-sig-3p repo.
-# Populate from XSOC's Appendix F (DSKAG / SP-VERSA / Wave Engine
-# internals control list). The lint job below is a placeholder until
-# this file is filled in; while empty, the job no-ops gracefully.
+# Populate it from the XSOC trade-secret control list covering DSKAG,
+# SP-VERSA, and wave engine internals.
+#
+# THE LINT IS FAIL-CLOSED. While this file holds no active terms, the
+# disclosure-lint job exits 2 and the check is red. That is deliberate and
+# must not be "fixed" by restoring an empty-list bypass. A green
+# disclosure-lint check asserts that the tracked tree was scanned against a
+# real control list; an empty list scans nothing, so it cannot support that
+# assertion. Populate the list, or delete the workflow until the list
+# exists. Those are the only two honest options.
+#
+# The scanner itself is covered by scripts/disclosure-lint-selftest.sh,
+# which exercises every exit path against scratch trees and runs green
+# today, independently of whether this file has been populated.
 #
 # CATEGORIES:
 #
@@ -22,7 +34,7 @@
 # 2. SP-VERSA cipher internals (modulation parameters, round constants)
 # 3. Wave engine internals (round count, S-box layout, mixing functions)
 # 4. Private xsoc-sig-core function names not part of the public API
-# 5. Any term explicitly designated trade-secret in Appendix F
+# 5. Any term explicitly designated trade-secret by the control list
 #
 # Examples (placeholders; replace with the real list):
 #
@@ -31,4 +43,3 @@
 # sp_versa_internal
 #
 # === Active terms below this line ===
-

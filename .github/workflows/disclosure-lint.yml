@@ -10,16 +10,42 @@ permissions:
   contents: read
 
 jobs:
-  disclosure-lint:
-    name: Forbidden terms scan
+  selftest:
+    name: Scanner self-test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
-      - name: Make script executable
-        run: chmod +x scripts/disclosure-lint.sh
+      # Proves the scanner's three exit paths against scratch trees.
+      # Independent of the contents of .disclosure-lint/forbidden.txt, so
+      # this is meaningful today, before the control list exists.
+      - name: Self-test the scanner
+        shell: bash
+        run: bash scripts/disclosure-lint-selftest.sh
 
-      - name: Run disclosure-lint
-        run: bash scripts/disclosure-lint.sh
+  # The production scan is deliberately NOT wired up yet.
+  #
+  # scripts/disclosure-lint.sh is fail-closed: with no active terms in
+  # .disclosure-lint/forbidden.txt it exits 2, because a scan that checked
+  # nothing must not render a green "forbidden terms" check on a public
+  # repository. Rather than carry a permanently red job, the scan is held
+  # out until the control list is populated.
+  #
+  # When .disclosure-lint/forbidden.txt has its terms, delete this comment
+  # and uncomment the job below. Do not instead weaken the scanner to make
+  # an empty list pass.
+  #
+  # disclosure-lint:
+  #   name: Forbidden terms scan
+  #   needs: selftest
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #       with:
+  #         fetch-depth: 1
+  #
+  #     - name: Scan tracked files against the control list
+  #       shell: bash
+  #       run: bash scripts/disclosure-lint.sh
