@@ -11,6 +11,10 @@ list is published at
 | Researcher | Finding | Release | Received |
 |---|---|---|---|
 | [tokenistq](https://github.com/tokenistq) | `tx_seq` allocation was scoped to the holder channel while replay enforcement is scoped to the P1-P3 pair, so two holders on one pair received the same sequence number | [0.2.0](CHANGELOG.md#020---2026-10-04) | 2026-10-04 |
+| [Ibnu76](https://github.com/ibnu76) | `PairSequencer` still derived `Clone` and implemented `Default`, so one pair could hold two allocators through a path reachable without any `clone()` call | [0.3.0](CHANGELOG.md#030---2026-10-06) | 2026-10-06 |
+| [Ibnu76](https://github.com/ibnu76) | The signature covered the message alone, leaving `tx_seq` outside what P1 authorized | [0.4.0](CHANGELOG.md#040---2026-10-06) | 2026-10-06 |
+| [Ibnu76](https://github.com/ibnu76) | The IC tag input lacked the `DST_IC` domain separator required by specification 3.3 step 3 | [0.4.0](CHANGELOG.md#040---2026-10-06) | 2026-10-06 |
+| [Ibnu76](https://github.com/ibnu76) | The wire length prefix was 8 bytes for 74 bytes of overhead, where the specification fixes 4 bytes and 70 | [0.4.0](CHANGELOG.md#040---2026-10-06) | 2026-10-06 |
 
 ## How credit is published
 

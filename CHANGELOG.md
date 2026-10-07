@@ -9,6 +9,12 @@ Conformance release. Breaking on the wire and in the transcript: payloads and
 tags produced by 0.3.0 and earlier do not verify under 0.4.0, and the reverse.
 Every peer on a pair must move together.
 
+The three conformance findings carried here, the signature transcript, the IC
+tag domain separator and the wire length prefix, were reported by Ibnu76
+(https://github.com/ibnu76) on 2026-10-06 and triaged as Moderate. The
+remaining items were found during the conformance pass those findings
+prompted.
+
 ### Security
 
 - The signature now covers `m || seq4`, per specification 3.3 step 2 and 3.4
@@ -108,8 +114,8 @@ no MAC transcript change, and no change to the cryptographic construction.
   The 0.2.0 regression suite did not catch this, because all six tests pass one
   shared allocator by `&mut`, which is the usage that works.
 
-  Reported externally on 2026-10-06 with a reproducing probe, and triaged as
-  Moderate.
+  Reported by Ibnu76 (https://github.com/ibnu76) on 2026-10-06 with a
+  reproducing probe, and triaged as Moderate.
 
 ### Added
 
