@@ -6,7 +6,7 @@ program and carried into a release of this crate.
 Each entry gives the name or handle the researcher chose, the finding, the
 release that carried the fix, and the date the report was received. The same
 list is published at
-[xsoccorp.com/q-sig-security-bounty/credits](https://www.xsoccorp.com/q-sig-security-bounty/credits).
+[xsoccorp.com/q-sig-security-bounty](https://www.xsoccorp.com/q-sig-security-bounty).
 
 | Researcher | Finding | Release | Received |
 |---|---|---|---|

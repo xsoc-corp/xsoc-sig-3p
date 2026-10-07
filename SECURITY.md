@@ -90,7 +90,7 @@ who:
 
 Researchers credited under this program are listed in
 [CREDITS.md](CREDITS.md) in this repository, and at
-https://www.xsoccorp.com/q-sig-security-bounty/credits.
+https://www.xsoccorp.com/q-sig-security-bounty.
 
 Credit is published once the reporting identity is confirmed. We ask for a
 public artifact under the account the credit will name, carrying a string we
